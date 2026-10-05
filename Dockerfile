@@ -44,7 +44,7 @@ EXPOSE 3000
 
 # Container health check
 HEALTHCHECK \
-    --interval=30s \
+    --interval=60s \
     --timeout=3s \
     --start-period=10s \
     --retries=3 \
