@@ -222,7 +222,7 @@ jobs:
           path: coverage/
 
       - name: SonarQube scan & quality gate
-        uses: SonarSource/sonarqube-scan-action@v6 # pin to a commit SHA like your other actions
+        uses: SonarSource/sonarqube-scan-action@v8 # pin to a commit SHA like your other actions
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
