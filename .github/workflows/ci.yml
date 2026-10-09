@@ -177,7 +177,7 @@ jobs:
         run: npm test
 
       - name: Code coverage
-        run: npm run test:coverage # must emit coverage/lcov.info for SonarQube
+        run: npm run test:coverage
 
       - name: Upload coverage report
         if: always()
@@ -188,71 +188,12 @@ jobs:
           if-no-files-found: ignore
 
   # --------------------------------------------------------------------
-  # 7. Code quality & security gate - SonarQube
-  #    Blocking: a failed Quality Gate stops the build, image scan and push.
-  #    Configure the gate in SonarQube on NEW code ("Clean as You Code").
-  # --------------------------------------------------------------------
-  # sonarqube:
-  #   name: 7. Code quality & security gate - SonarQube
-  #   runs-on: ubuntu-latest
-  #   needs: test
-  #   # Fork PRs cannot read secrets, so skip them instead of failing
-  #   if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-  #   timeout-minutes: 20
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v7
-  #       with:
-  #         fetch-depth: 0 # full history: accurate blame + new-code detection
-
-  #     - name: Validate SonarQube config
-  #       run: |
-  #         missing=()
-  #         [[ -z "${{ secrets.SONAR_TOKEN }}" ]] && missing+=("SONAR_TOKEN (secret)")
-  #         [[ -z "${{ secrets.SONAR_HOST_URL }}" ]] && missing+=("SONAR_HOST_URL (secret)")
-  #         if [[ ${#missing[@]} -gt 0 ]]; then
-  #           echo "::error::Missing required config: ${missing[*]}. Set these under Settings > Secrets and variables > Actions."
-  #           exit 1
-  #         fi
-
-  #     - name: Download coverage report
-  #       uses: actions/download-artifact@v7
-  #       with:
-  #         name: coverage-report
-  #         path: coverage/
-
-  #     - name: SonarQube scan & quality gate
-  #       uses: SonarSource/sonarqube-scan-action@v6 # pin to a commit SHA like your other actions
-  #       env:
-  #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-  #         SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-  #       with:
-  #         args: >
-  #           -Dsonar.projectKey=saas-web-application
-  #           -Dsonar.projectName=saas-web-application
-  #           -Dsonar.projectVersion=${{ github.sha }}
-  #           -Dsonar.sources=src
-  #           -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/*.test.*,**/*.spec.*
-  #           -Dsonar.tests=src
-  #           -Dsonar.test.inclusions=**/*.test.*,**/*.spec.*
-  #           -Dsonar.coverage.exclusions=**/*.test.*,**/*.spec.*,**/*.config.*
-  #           -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-  #           -Dsonar.sourceEncoding=UTF-8
-  #           -Dsonar.qualitygate.wait=true
-  #           -Dsonar.qualitygate.timeout=300
-
-  # --------------------------------------------------------------------
-  # 8. Build application + Docker image (shared as an artifact)
+  # 7. Build application + Docker image (shared as an artifact)
   # --------------------------------------------------------------------
   build:
-    name: 8. Build application & image
+    name: 7. Build application & image
     runs-on: ubuntu-latest
     needs: [test]
-    # Proceed only when tests passed and the Sonar gate passed (or was skipped for fork PRs)
-    # if: >-
-    #   ${{ !cancelled()
-    #   && needs.test.result == 'success'
-    #   && (needs.sonarqube.result == 'success' || needs.sonarqube.result == 'skipped') }}
     timeout-minutes: 20
     steps:
       - name: Checkout repository
@@ -295,10 +236,10 @@ jobs:
           retention-days: 1
 
   # --------------------------------------------------------------------
-  # 9. Container image scanning (Trivy + Grype) & SBOM (Syft)
+  # 8. Container image scanning (Trivy + Grype) & SBOM (Syft)
   # --------------------------------------------------------------------
   image-scan:
-    name: 9. Container image scan & SBOM
+    name: 8. Container image scan & SBOM
     runs-on: ubuntu-latest
     needs: build
     timeout-minutes: 20
@@ -363,10 +304,10 @@ jobs:
           if-no-files-found: ignore
 
   # --------------------------------------------------------------------
-  # 10. Push image to Docker Hub (main branch only, secrets required)
+  # 9. Push image to Docker Hub (main branch only, secrets required)
   # --------------------------------------------------------------------
   push-image:
-    name: 10. Push image to Docker Hub
+    name: 9. Push image to Docker Hub
     runs-on: ubuntu-latest
     needs: image-scan
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -399,10 +340,10 @@ jobs:
           docker push "$DOCKERHUB_USERNAME/saas-web-application:${GITHUB_SHA::8}"
 
   # --------------------------------------------------------------------
-  # 11. Email notification (pipeline status)
+  # 10. Email notification (pipeline status)
   # --------------------------------------------------------------------
   notify:
-    name: 11. Email notification
+    name: 10. Email notification
     runs-on: ubuntu-latest
     needs:
       - secrets-scan
@@ -411,7 +352,6 @@ jobs:
       - sca
       - quality
       - test
-      - sonarqube
       - build
       - image-scan
       - push-image
@@ -469,10 +409,9 @@ jobs:
               <tr><td><b>4. SCA (OWASP)</b></td><td>${{ needs.sca.result }}</td></tr>
               <tr><td><b>5. Lint & format</b></td><td>${{ needs.quality.result }}</td></tr>
               <tr><td><b>6. Unit tests</b></td><td>${{ needs.test.result }}</td></tr>
-              <tr><td><b>7. Code quality & security gate (SonarQube)</b></td><td>${{ needs.sonarqube.result }}</td></tr>
-              <tr><td><b>8. Build</b></td><td>${{ needs.build.result }}</td></tr>
-              <tr><td><b>9. Image scan & SBOM (Trivy image scan)</b></td><td>${{ needs['image-scan'].result }}</td></tr>
-              <tr><td><b>10. Push image</b></td><td>${{ needs['push-image'].result }}</td></tr>
+              <tr><td><b>7. Build</b></td><td>${{ needs.build.result }}</td></tr>
+              <tr><td><b>8. Image scan & SBOM (Trivy image scan)</b></td><td>${{ needs['image-scan'].result }}</td></tr>
+              <tr><td><b>9. Push image</b></td><td>${{ needs['push-image'].result }}</td></tr>
             </table>
             <p>
               <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">
@@ -481,10 +420,10 @@ jobs:
             </p>
 
   # --------------------------------------------------------------------
-  # 12. Slack notification (pipeline status)
+  # 11. Slack notification (pipeline status)
   # --------------------------------------------------------------------
   slack-notify:
-    name: 12. Slack notification
+    name: 11. Slack notification
     runs-on: ubuntu-latest
     needs:
       - secrets-scan
@@ -493,7 +432,6 @@ jobs:
       - sca
       - quality
       - test
-      - sonarqube
       - build
       - image-scan
       - push-image
@@ -566,10 +504,9 @@ jobs:
                       { "type": "mrkdwn", "text": "*4. SCA (OWASP):*\n${{ needs.sca.result }}" },
                       { "type": "mrkdwn", "text": "*5. Lint & format:*\n${{ needs.quality.result }}" },
                       { "type": "mrkdwn", "text": "*6. Unit tests:*\n${{ needs.test.result }}" },
-                      { "type": "mrkdwn", "text": "*7. SonarQube gate:*\n${{ needs.sonarqube.result }}" },
-                      { "type": "mrkdwn", "text": "*8. Build:*\n${{ needs.build.result }}" },
-                      { "type": "mrkdwn", "text": "*9. Image scan & SBOM:*\n${{ needs['image-scan'].result }}" },
-                      { "type": "mrkdwn", "text": "*10. Push image:*\n${{ needs['push-image'].result }}" }
+                      { "type": "mrkdwn", "text": "*7. Build:*\n${{ needs.build.result }}" },
+                      { "type": "mrkdwn", "text": "*8. Image scan & SBOM:*\n${{ needs['image-scan'].result }}" },
+                      { "type": "mrkdwn", "text": "*9. Push image:*\n${{ needs['push-image'].result }}" }
                     ]
                   },
                   {
