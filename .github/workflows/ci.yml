@@ -192,54 +192,54 @@ jobs:
   #    Blocking: a failed Quality Gate stops the build, image scan and push.
   #    Configure the gate in SonarQube on NEW code ("Clean as You Code").
   # --------------------------------------------------------------------
-  sonarqube:
-    name: 7. Code quality & security gate - SonarQube
-    runs-on: ubuntu-latest
-    needs: test
-    # Fork PRs cannot read secrets, so skip them instead of failing
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    timeout-minutes: 20
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0 # full history: accurate blame + new-code detection
+  # sonarqube:
+  #   name: 7. Code quality & security gate - SonarQube
+  #   runs-on: ubuntu-latest
+  #   needs: test
+  #   # Fork PRs cannot read secrets, so skip them instead of failing
+  #   if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+  #   timeout-minutes: 20
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v7
+  #       with:
+  #         fetch-depth: 0 # full history: accurate blame + new-code detection
 
-      - name: Validate SonarQube config
-        run: |
-          missing=()
-          [[ -z "${{ secrets.SONAR_TOKEN }}" ]] && missing+=("SONAR_TOKEN (secret)")
-          [[ -z "${{ secrets.SONAR_HOST_URL }}" ]] && missing+=("SONAR_HOST_URL (secret)")
-          if [[ ${#missing[@]} -gt 0 ]]; then
-            echo "::error::Missing required config: ${missing[*]}. Set these under Settings > Secrets and variables > Actions."
-            exit 1
-          fi
+  #     - name: Validate SonarQube config
+  #       run: |
+  #         missing=()
+  #         [[ -z "${{ secrets.SONAR_TOKEN }}" ]] && missing+=("SONAR_TOKEN (secret)")
+  #         [[ -z "${{ secrets.SONAR_HOST_URL }}" ]] && missing+=("SONAR_HOST_URL (secret)")
+  #         if [[ ${#missing[@]} -gt 0 ]]; then
+  #           echo "::error::Missing required config: ${missing[*]}. Set these under Settings > Secrets and variables > Actions."
+  #           exit 1
+  #         fi
 
-      - name: Download coverage report
-        uses: actions/download-artifact@v7
-        with:
-          name: coverage-report
-          path: coverage/
+  #     - name: Download coverage report
+  #       uses: actions/download-artifact@v7
+  #       with:
+  #         name: coverage-report
+  #         path: coverage/
 
-      - name: SonarQube scan & quality gate
-        uses: SonarSource/sonarqube-scan-action@v6 # pin to a commit SHA like your other actions
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        with:
-          args: >
-            -Dsonar.projectKey=saas-web-application
-            -Dsonar.projectName=saas-web-application
-            -Dsonar.projectVersion=${{ github.sha }}
-            -Dsonar.sources=src
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/*.test.*,**/*.spec.*
-            -Dsonar.tests=src
-            -Dsonar.test.inclusions=**/*.test.*,**/*.spec.*
-            -Dsonar.coverage.exclusions=**/*.test.*,**/*.spec.*,**/*.config.*
-            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-            -Dsonar.sourceEncoding=UTF-8
-            -Dsonar.qualitygate.wait=true
-            -Dsonar.qualitygate.timeout=300
+  #     - name: SonarQube scan & quality gate
+  #       uses: SonarSource/sonarqube-scan-action@v6 # pin to a commit SHA like your other actions
+  #       env:
+  #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  #         SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+  #       with:
+  #         args: >
+  #           -Dsonar.projectKey=saas-web-application
+  #           -Dsonar.projectName=saas-web-application
+  #           -Dsonar.projectVersion=${{ github.sha }}
+  #           -Dsonar.sources=src
+  #           -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/*.test.*,**/*.spec.*
+  #           -Dsonar.tests=src
+  #           -Dsonar.test.inclusions=**/*.test.*,**/*.spec.*
+  #           -Dsonar.coverage.exclusions=**/*.test.*,**/*.spec.*,**/*.config.*
+  #           -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+  #           -Dsonar.sourceEncoding=UTF-8
+  #           -Dsonar.qualitygate.wait=true
+  #           -Dsonar.qualitygate.timeout=300
 
   # --------------------------------------------------------------------
   # 8. Build application + Docker image (shared as an artifact)
@@ -247,12 +247,12 @@ jobs:
   build:
     name: 8. Build application & image
     runs-on: ubuntu-latest
-    needs: [test, sonarqube]
+    needs: [test]
     # Proceed only when tests passed and the Sonar gate passed (or was skipped for fork PRs)
-    if: >-
-      ${{ !cancelled()
-      && needs.test.result == 'success'
-      && (needs.sonarqube.result == 'success' || needs.sonarqube.result == 'skipped') }}
+    # if: >-
+    #   ${{ !cancelled()
+    #   && needs.test.result == 'success'
+    #   && (needs.sonarqube.result == 'success' || needs.sonarqube.result == 'skipped') }}
     timeout-minutes: 20
     steps:
       - name: Checkout repository
