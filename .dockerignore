@@ -1,14 +1,28 @@
-node_modules
-data
-*.db
-*.db-shm
-*.db-wal
-.git
-.gitignore
+# Dependencies
+node_modules/
+
+# Environment variables and secrets
 .env
 .env.*
 !.env.example
+
+# Local data and databases
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
 npm-debug.log*
-coverage
-Dockerfile
-docker-compose.yml
+*.log
+
+# Test coverage
+coverage/
+
+# Build output
+dist/
+build/
+
+# OS and editor files
+.DS_Store
+.vscode/
