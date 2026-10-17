@@ -13,9 +13,11 @@ permissions:
   contents: read
   security-events: write
   pull-requests: write
+  issues: write # Required by OWASP ZAP action when issue reporting is evaluated
 
 env:
   NODE_VERSION: "25"
+  APP_PORT: "3000" # Port your containerized web app listens on for DAST scanning
   # Set DOCKERHUB_USERNAME + DOCKERHUB_PASSWORD secrets to enable the push stage
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
@@ -97,7 +99,7 @@ jobs:
           category: semgrep
 
   # --------------------------------------------------------------------
-  # 4. Software Composition Analysis (SCA)
+  # 4. Software Composition Analysis (SCA - OWASP Dependency-Check)
   # --------------------------------------------------------------------
   sca:
     name: 4. Software composition analysis - OWASP
@@ -109,13 +111,23 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Dependency check - OWASP Dependency-Check
+        id: owasp-sca
         continue-on-error: true # NVD database sync can be flaky; results are uploaded regardless
         uses: dependency-check/Dependency-Check_Action@75ba02d6183445fe0761d26e836bde58b1560600 # 1.1.0
         with:
           project: "saas-web-application"
           path: "."
           format: "SARIF"
+          out: "reports"
           args: "--failOnCVSS 7 --enableRetired --prettyPrint"
+
+      - name: Upload OWASP Dependency-Check SARIF
+        if: always() && steps.owasp-sca.conclusion != 'skipped'
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+          category: owasp-dependency-check
 
       - name: Upload Dependency-Check report
         if: always()
@@ -304,12 +316,74 @@ jobs:
           if-no-files-found: ignore
 
   # --------------------------------------------------------------------
-  # 9. Push image to Docker Hub (main branch only, secrets required)
+  # 9. Dynamic Application Security Testing (DAST - OWASP ZAP)
   # --------------------------------------------------------------------
-  push-image:
-    name: 9. Push image to Docker Hub
+  owasp-zap-scan:
+    name: 9. OWASP ZAP DAST scan
     runs-on: ubuntu-latest
     needs: image-scan
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: app-image
+          path: image/
+
+      - name: Load Docker image
+        run: gunzip -c image/image.tar.gz | docker load
+
+      - name: Start application container for DAST
+        run: |
+          docker run -d --name dast-target \
+            -p "${APP_PORT}:${APP_PORT}" \
+            saas-web-application:ci
+
+          echo "Waiting for application to listen on http://localhost:${APP_PORT}..."
+          for i in {1..30}; do
+            if curl -s -o /dev/null "http://localhost:${APP_PORT}"; then
+              echo "Application is up and ready!"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run OWASP ZAP Baseline Scan
+        id: zap-scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "http://localhost:${{ env.APP_PORT }}"
+          cmd_options: "-a -j"
+          fail_action: false # monitor-only; set to true to fail build on ZAP alerts
+          allow_issue_writing: false
+
+      - name: Upload OWASP ZAP reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: owasp-zap-report
+          path: |
+            report_html.html
+            report_json.json
+            report_md.md
+          if-no-files-found: ignore
+
+      - name: Stop application container
+        if: always()
+        run: docker rm -f dast-target || true
+
+  # --------------------------------------------------------------------
+  # 10. Push image to Docker Hub (main branch only, secrets required)
+  # --------------------------------------------------------------------
+  push-image:
+    name: 10. Push image to Docker Hub
+    runs-on: ubuntu-latest
+    needs:
+      - image-scan
+      - owasp-zap-scan
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     timeout-minutes: 15
     steps:
@@ -340,10 +414,10 @@ jobs:
           docker push "$DOCKERHUB_USERNAME/saas-web-application:${GITHUB_SHA::8}"
 
   # --------------------------------------------------------------------
-  # 10. Email notification (pipeline status)
+  # 11. Email notification (pipeline status)
   # --------------------------------------------------------------------
   notify:
-    name: 10. Email notification
+    name: 11. Email notification
     runs-on: ubuntu-latest
     needs:
       - secrets-scan
@@ -354,6 +428,7 @@ jobs:
       - test
       - build
       - image-scan
+      - owasp-zap-scan
       - push-image
     if: always() # run regardless of upstream success/failure/skip
     timeout-minutes: 5
@@ -396,7 +471,7 @@ jobs:
           to: ${{ vars.EMAIL_TO }}
           from: "GitHub Actions <${{ secrets.EMAIL_USERNAME }}>"
           html_body: |
-            <h2>${{ steps.status.outputs.emoji }} DevSecOps CI/CD Pipeline — ${{ steps.status.outputs.result }}</h2>
+            <h2>${{ steps.status.outputs.emoji }} DevSecOps CI/CD Pipeline —${{ steps.status.outputs.result }}</h2>
             <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse;font-family:sans-serif;font-size:14px;">
               <tr><td><b>Repository</b></td><td>${{ github.repository }}</td></tr>
               <tr><td><b>Branch / Ref</b></td><td>${{ github.ref_name }}</td></tr>
@@ -406,12 +481,13 @@ jobs:
               <tr><td><b>1. Secrets scan</b></td><td>${{ needs['secrets-scan'].result }}</td></tr>
               <tr><td><b>2. Trivy filesystem scan</b></td><td>${{ needs['trivy-fs-scan'].result }}</td></tr>
               <tr><td><b>3. SAST (Semgrep)</b></td><td>${{ needs.sast.result }}</td></tr>
-              <tr><td><b>4. SCA (OWASP)</b></td><td>${{ needs.sca.result }}</td></tr>
+              <tr><td><b>4. SCA (OWASP Dependency-Check)</b></td><td>${{ needs.sca.result }}</td></tr>
               <tr><td><b>5. Lint & format</b></td><td>${{ needs.quality.result }}</td></tr>
               <tr><td><b>6. Unit tests</b></td><td>${{ needs.test.result }}</td></tr>
               <tr><td><b>7. Build</b></td><td>${{ needs.build.result }}</td></tr>
-              <tr><td><b>8. Image scan & SBOM (Trivy image scan)</b></td><td>${{ needs['image-scan'].result }}</td></tr>
-              <tr><td><b>9. Push image</b></td><td>${{ needs['push-image'].result }}</td></tr>
+              <tr><td><b>8. Image scan & SBOM</b></td><td>${{ needs['image-scan'].result }}</td></tr>
+              <tr><td><b>9. DAST (OWASP ZAP)</b></td><td>${{ needs['owasp-zap-scan'].result }}</td></tr>
+              <tr><td><b>10. Push image</b></td><td>${{ needs['push-image'].result }}</td></tr>
             </table>
             <p>
               <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">
@@ -420,10 +496,10 @@ jobs:
             </p>
 
   # --------------------------------------------------------------------
-  # 11. Slack notification (pipeline status)
+  # 12. Slack notification (pipeline status)
   # --------------------------------------------------------------------
   slack-notify:
-    name: 11. Slack notification
+    name: 12. Slack notification
     runs-on: ubuntu-latest
     needs:
       - secrets-scan
@@ -434,6 +510,7 @@ jobs:
       - test
       - build
       - image-scan
+      - owasp-zap-scan
       - push-image
     if: always() # run regardless of upstream success/failure/skip
     timeout-minutes: 5
@@ -481,7 +558,7 @@ jobs:
                     "type": "header",
                     "text": {
                       "type": "plain_text",
-                      "text": "${STATUS_EMOJI} DevSecOps CI/CD - ${STATUS_RESULT}",
+                      "text": "${STATUS_EMOJI} DevSecOps CI/CD -${STATUS_RESULT}",
                       "emoji": true
                     }
                   },
@@ -506,7 +583,8 @@ jobs:
                       { "type": "mrkdwn", "text": "*6. Unit tests:*\n${{ needs.test.result }}" },
                       { "type": "mrkdwn", "text": "*7. Build:*\n${{ needs.build.result }}" },
                       { "type": "mrkdwn", "text": "*8. Image scan & SBOM:*\n${{ needs['image-scan'].result }}" },
-                      { "type": "mrkdwn", "text": "*9. Push image:*\n${{ needs['push-image'].result }}" }
+                      { "type": "mrkdwn", "text": "*9. DAST (OWASP ZAP):*\n${{ needs['owasp-zap-scan'].result }}" },
+                      { "type": "mrkdwn", "text": "*10. Push image:*\n${{ needs['push-image'].result }}" }
                     ]
                   },
                   {
