@@ -63,16 +63,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # TruffleHog needs full history for diff-based scanning
+          fetch-depth: 0 # full history so the commit range is available
 
       - name: Secrets scanning - TruffleHog
         uses: trufflesecurity/trufflehog@v3.90.0
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
           extra_args: --results=verified,unknown --no-update
-          # No --fail flag: monitor-only, consistent with the other scanners
+          # base/head intentionally omitted: the action derives the range from the event
 
   # 3. Static analysis - CodeQL
   codeql:
