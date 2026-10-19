@@ -18,13 +18,27 @@ permissions:
 env:
   NODE_VERSION: "25"
   APP_PORT: "3000" # Port your containerized web app listens on for DAST scanning
-  # Set DOCKERHUB_USERNAME + DOCKERHUB_PASSWORD secrets to enable the push stage
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+# ============================================================================
+# Execution graph
+#
+#   Wave 1 (fully parallel, no dependencies):
+#     secrets-scan · trufflehog-scan · codeql · sast · hadolint
+#     trivy-fs-scan · sca · quality
+#
+#   Wave 2:  test (needs quality) -> build (needs test)
+#   Wave 3:  image-scan (needs build) -> owasp-zap-scan (needs image-scan)
+#   Gate:    push-image (needs every job above)
+#   Always:  notify-email, slack-notify
+# ============================================================================
 
 jobs:
   # --------------------------------------------------------------------
-  # 1. Secrets scanning
+  # WAVE 1 — parallel security and quality checks
   # --------------------------------------------------------------------
+
+  # 1. Secrets scanning - Gitleaks
   secrets-scan:
     name: 1. Secrets scanning - Gitleaks
     runs-on: ubuntu-latest
@@ -40,13 +54,100 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # --------------------------------------------------------------------
-  # 2. Trivy filesystem scan (source code & dependencies)
-  # --------------------------------------------------------------------
-  trivy-fs-scan:
-    name: 2. Trivy filesystem scan
+  # 2. Secrets scanning - TruffleHog (verified + unknown results)
+  trufflehog-scan:
+    name: 2. Secrets scanning - TruffleHog
     runs-on: ubuntu-latest
-    needs: secrets-scan
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # TruffleHog needs full history for diff-based scanning
+
+      - name: Secrets scanning - TruffleHog
+        uses: trufflesecurity/trufflehog@v3.90.0
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --results=verified,unknown --no-update
+          # No --fail flag: monitor-only, consistent with the other scanners
+
+  # 3. Static analysis - CodeQL
+  codeql:
+    name: 3. Static analysis - CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          build-mode: none # JS/TS is interpreted, so no build step is needed
+          queries: security-extended
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:javascript-typescript"
+
+  # 4. Static analysis - Semgrep
+  sast:
+    name: 4. Static analysis - Semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Semgrep
+        run: pipx install semgrep
+
+      - name: Static code analysis - Semgrep
+        id: semgrep-scan
+        continue-on-error: true # findings surface as SARIF in the Security tab
+        run: semgrep --config p/owasp-top-ten --sarif --output results.sarif .
+
+      - name: Upload Semgrep SARIF
+        if: always() && steps.semgrep-scan.conclusion != 'skipped'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif
+          category: semgrep
+
+  # 5. Dockerfile lint - Hadolint
+  hadolint:
+    name: 5. Dockerfile lint - Hadolint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Lint Dockerfile - Hadolint
+        id: hadolint-scan
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          format: sarif
+          output-file: hadolint-results.sarif
+          no-fail: true # monitor-only; findings surface as SARIF in the Security tab
+
+      - name: Upload Hadolint SARIF
+        if: always() && steps.hadolint-scan.conclusion != 'skipped'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: hadolint-results.sarif
+          category: hadolint
+
+  # 6. Trivy filesystem scan (source code & dependencies)
+  trivy-fs-scan:
+    name: 6. Trivy filesystem scan
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout repository
@@ -71,40 +172,10 @@ jobs:
           sarif_file: trivy-fs-results.sarif
           category: trivy-fs
 
-  # --------------------------------------------------------------------
-  # 3. Static Application Security Testing (SAST)
-  # --------------------------------------------------------------------
-  sast:
-    name: 3. Static analysis - Semgrep
-    runs-on: ubuntu-latest
-    needs: secrets-scan
-    timeout-minutes: 15
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Install Semgrep
-        run: pipx install semgrep
-
-      - name: Static code analysis - Semgrep
-        id: semgrep-scan
-        continue-on-error: true # findings surface as SARIF in the Security tab
-        run: semgrep --config p/owasp-top-ten --sarif --output results.sarif .
-
-      - name: Upload Semgrep SARIF
-        if: always() && steps.semgrep-scan.conclusion != 'skipped'
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: results.sarif
-          category: semgrep
-
-  # --------------------------------------------------------------------
-  # 4. Software Composition Analysis (SCA - OWASP Dependency-Check)
-  # --------------------------------------------------------------------
+  # 7. Software Composition Analysis - OWASP Dependency-Check
   sca:
-    name: 4. Software composition analysis - OWASP
+    name: 7. Software composition analysis - OWASP
     runs-on: ubuntu-latest
-    needs: secrets-scan
     timeout-minutes: 15
     steps:
       - name: Checkout repository
@@ -137,13 +208,10 @@ jobs:
           path: reports/
           if-no-files-found: ignore
 
-  # --------------------------------------------------------------------
-  # 5. Code quality (lint + format)
-  # --------------------------------------------------------------------
+  # 8. Code quality (lint + format)
   quality:
-    name: 5. Lint & format
+    name: 8. Lint & format
     runs-on: ubuntu-latest
-    needs: secrets-scan
     timeout-minutes: 10
     steps:
       - name: Checkout repository
@@ -165,10 +233,12 @@ jobs:
         run: npm run format:check
 
   # --------------------------------------------------------------------
-  # 6. Unit tests + coverage
+  # WAVE 2 — tests and build
   # --------------------------------------------------------------------
+
+  # 9. Unit tests + coverage
   test:
-    name: 6. Unit tests & coverage
+    name: 9. Unit tests & coverage
     runs-on: ubuntu-latest
     needs: quality
     timeout-minutes: 15
@@ -199,11 +269,9 @@ jobs:
           path: coverage/
           if-no-files-found: ignore
 
-  # --------------------------------------------------------------------
-  # 7. Build application + Docker image (shared as an artifact)
-  # --------------------------------------------------------------------
+  # 10. Build application + Docker image (shared as an artifact)
   build:
-    name: 7. Build application & image
+    name: 10. Build application & image
     runs-on: ubuntu-latest
     needs: [test]
     timeout-minutes: 20
@@ -248,10 +316,12 @@ jobs:
           retention-days: 1
 
   # --------------------------------------------------------------------
-  # 8. Container image scanning (Trivy + Grype) & SBOM (Syft)
+  # WAVE 3 — image scanning and DAST
   # --------------------------------------------------------------------
+
+  # 11. Container image scanning (Trivy + Grype) & SBOM (Syft)
   image-scan:
-    name: 8. Container image scan & SBOM
+    name: 11. Container image scan & SBOM
     runs-on: ubuntu-latest
     needs: build
     timeout-minutes: 20
@@ -315,11 +385,9 @@ jobs:
           path: sbom.cyclonedx.json
           if-no-files-found: ignore
 
-  # --------------------------------------------------------------------
-  # 9. Dynamic Application Security Testing (DAST - OWASP ZAP)
-  # --------------------------------------------------------------------
+  # 12. Dynamic Application Security Testing (DAST - OWASP ZAP)
   owasp-zap-scan:
-    name: 9. OWASP ZAP DAST scan
+    name: 12. OWASP ZAP DAST scan
     runs-on: ubuntu-latest
     needs: image-scan
     timeout-minutes: 20
@@ -376,12 +444,24 @@ jobs:
         run: docker rm -f dast-target || true
 
   # --------------------------------------------------------------------
-  # 10. Push image to Docker Hub (main branch only, secrets required)
+  # GATE — push only when every upstream job has finished
   # --------------------------------------------------------------------
+
+  # 13. Push image to Docker Hub (main branch only, secrets required)
   push-image:
-    name: 10. Push image to Docker Hub
+    name: 13. Push image to Docker Hub
     runs-on: ubuntu-latest
     needs:
+      - secrets-scan
+      - trufflehog-scan
+      - codeql
+      - sast
+      - hadolint
+      - trivy-fs-scan
+      - sca
+      - quality
+      - test
+      - build
       - image-scan
       - owasp-zap-scan
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -414,15 +494,20 @@ jobs:
           docker push "$DOCKERHUB_USERNAME/saas-web-application:${GITHUB_SHA::8}"
 
   # --------------------------------------------------------------------
-  # 11. Email notification (pipeline status)
+  # NOTIFICATIONS
   # --------------------------------------------------------------------
+
+  # 14. Email notification (pipeline status)
   notify:
-    name: 11. Email notification
+    name: 14. Email notification
     runs-on: ubuntu-latest
     needs:
       - secrets-scan
-      - trivy-fs-scan
+      - trufflehog-scan
+      - codeql
       - sast
+      - hadolint
+      - trivy-fs-scan
       - sca
       - quality
       - test
@@ -471,23 +556,26 @@ jobs:
           to: ${{ vars.EMAIL_TO }}
           from: "GitHub Actions <${{ secrets.EMAIL_USERNAME }}>"
           html_body: |
-            <h2>${{ steps.status.outputs.emoji }} DevSecOps CI/CD Pipeline —${{ steps.status.outputs.result }}</h2>
+            <h2>${{ steps.status.outputs.emoji }} DevSecOps CI/CD Pipeline — ${{ steps.status.outputs.result }}</h2>
             <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse;font-family:sans-serif;font-size:14px;">
               <tr><td><b>Repository</b></td><td>${{ github.repository }}</td></tr>
               <tr><td><b>Branch / Ref</b></td><td>${{ github.ref_name }}</td></tr>
               <tr><td><b>Triggered by</b></td><td>${{ github.actor }}</td></tr>
               <tr><td><b>Event</b></td><td>${{ github.event_name }}</td></tr>
               <tr><td><b>Commit</b></td><td>${{ github.sha }}</td></tr>
-              <tr><td><b>1. Secrets scan</b></td><td>${{ needs['secrets-scan'].result }}</td></tr>
-              <tr><td><b>2. Trivy filesystem scan</b></td><td>${{ needs['trivy-fs-scan'].result }}</td></tr>
-              <tr><td><b>3. SAST (Semgrep)</b></td><td>${{ needs.sast.result }}</td></tr>
-              <tr><td><b>4. SCA (OWASP Dependency-Check)</b></td><td>${{ needs.sca.result }}</td></tr>
-              <tr><td><b>5. Lint & format</b></td><td>${{ needs.quality.result }}</td></tr>
-              <tr><td><b>6. Unit tests</b></td><td>${{ needs.test.result }}</td></tr>
-              <tr><td><b>7. Build</b></td><td>${{ needs.build.result }}</td></tr>
-              <tr><td><b>8. Image scan & SBOM</b></td><td>${{ needs['image-scan'].result }}</td></tr>
-              <tr><td><b>9. DAST (OWASP ZAP)</b></td><td>${{ needs['owasp-zap-scan'].result }}</td></tr>
-              <tr><td><b>10. Push image</b></td><td>${{ needs['push-image'].result }}</td></tr>
+              <tr><td><b>1. Secrets scan (Gitleaks)</b></td><td>${{ needs['secrets-scan'].result }}</td></tr>
+              <tr><td><b>2. Secrets scan (TruffleHog)</b></td><td>${{ needs['trufflehog-scan'].result }}</td></tr>
+              <tr><td><b>3. CodeQL</b></td><td>${{ needs.codeql.result }}</td></tr>
+              <tr><td><b>4. SAST (Semgrep)</b></td><td>${{ needs.sast.result }}</td></tr>
+              <tr><td><b>5. Dockerfile lint (Hadolint)</b></td><td>${{ needs.hadolint.result }}</td></tr>
+              <tr><td><b>6. Trivy filesystem scan</b></td><td>${{ needs['trivy-fs-scan'].result }}</td></tr>
+              <tr><td><b>7. SCA (OWASP Dependency-Check)</b></td><td>${{ needs.sca.result }}</td></tr>
+              <tr><td><b>8. Lint & format</b></td><td>${{ needs.quality.result }}</td></tr>
+              <tr><td><b>9. Unit tests</b></td><td>${{ needs.test.result }}</td></tr>
+              <tr><td><b>10. Build</b></td><td>${{ needs.build.result }}</td></tr>
+              <tr><td><b>11. Image scan & SBOM</b></td><td>${{ needs['image-scan'].result }}</td></tr>
+              <tr><td><b>12. DAST (OWASP ZAP)</b></td><td>${{ needs['owasp-zap-scan'].result }}</td></tr>
+              <tr><td><b>13. Push image</b></td><td>${{ needs['push-image'].result }}</td></tr>
             </table>
             <p>
               <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">
@@ -495,16 +583,17 @@ jobs:
               </a>
             </p>
 
-  # --------------------------------------------------------------------
-  # 12. Slack notification (pipeline status)
-  # --------------------------------------------------------------------
+  # 15. Slack notification (pipeline status)
   slack-notify:
-    name: 12. Slack notification
+    name: 15. Slack notification
     runs-on: ubuntu-latest
     needs:
       - secrets-scan
-      - trivy-fs-scan
+      - trufflehog-scan
+      - codeql
       - sast
+      - hadolint
+      - trivy-fs-scan
       - sca
       - quality
       - test
@@ -558,7 +647,7 @@ jobs:
                     "type": "header",
                     "text": {
                       "type": "plain_text",
-                      "text": "${STATUS_EMOJI} DevSecOps CI/CD -${STATUS_RESULT}",
+                      "text": "${STATUS_EMOJI} DevSecOps CI/CD - ${STATUS_RESULT}",
                       "emoji": true
                     }
                   },
@@ -575,16 +664,24 @@ jobs:
                   {
                     "type": "section",
                     "fields": [
-                      { "type": "mrkdwn", "text": "*1. Secrets scan:*\n${{ needs['secrets-scan'].result }}" },
-                      { "type": "mrkdwn", "text": "*2. Trivy FS scan:*\n${{ needs['trivy-fs-scan'].result }}" },
-                      { "type": "mrkdwn", "text": "*3. SAST (Semgrep):*\n${{ needs.sast.result }}" },
-                      { "type": "mrkdwn", "text": "*4. SCA (OWASP):*\n${{ needs.sca.result }}" },
-                      { "type": "mrkdwn", "text": "*5. Lint & format:*\n${{ needs.quality.result }}" },
-                      { "type": "mrkdwn", "text": "*6. Unit tests:*\n${{ needs.test.result }}" },
-                      { "type": "mrkdwn", "text": "*7. Build:*\n${{ needs.build.result }}" },
-                      { "type": "mrkdwn", "text": "*8. Image scan & SBOM:*\n${{ needs['image-scan'].result }}" },
-                      { "type": "mrkdwn", "text": "*9. DAST (OWASP ZAP):*\n${{ needs['owasp-zap-scan'].result }}" },
-                      { "type": "mrkdwn", "text": "*10. Push image:*\n${{ needs['push-image'].result }}" }
+                      { "type": "mrkdwn", "text": "*1. Secrets (Gitleaks):*\n${{ needs['secrets-scan'].result }}" },
+                      { "type": "mrkdwn", "text": "*2. Secrets (TruffleHog):*\n${{ needs['trufflehog-scan'].result }}" },
+                      { "type": "mrkdwn", "text": "*3. CodeQL:*\n${{ needs.codeql.result }}" },
+                      { "type": "mrkdwn", "text": "*4. SAST (Semgrep):*\n${{ needs.sast.result }}" },
+                      { "type": "mrkdwn", "text": "*5. Hadolint:*\n${{ needs.hadolint.result }}" },
+                      { "type": "mrkdwn", "text": "*6. Trivy FS scan:*\n${{ needs['trivy-fs-scan'].result }}" },
+                      { "type": "mrkdwn", "text": "*7. SCA (OWASP):*\n${{ needs.sca.result }}" }
+                    ]
+                  },
+                  {
+                    "type": "section",
+                    "fields": [
+                      { "type": "mrkdwn", "text": "*8. Lint & format:*\n${{ needs.quality.result }}" },
+                      { "type": "mrkdwn", "text": "*9. Unit tests:*\n${{ needs.test.result }}" },
+                      { "type": "mrkdwn", "text": "*10. Build:*\n${{ needs.build.result }}" },
+                      { "type": "mrkdwn", "text": "*11. Image scan & SBOM:*\n${{ needs['image-scan'].result }}" },
+                      { "type": "mrkdwn", "text": "*12. DAST (OWASP ZAP):*\n${{ needs['owasp-zap-scan'].result }}" },
+                      { "type": "mrkdwn", "text": "*13. Push image:*\n${{ needs['push-image'].result }}" }
                     ]
                   },
                   {
