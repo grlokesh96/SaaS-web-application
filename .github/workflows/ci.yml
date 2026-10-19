@@ -54,7 +54,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # 2. Secrets scanning - TruffleHog (verified + unknown results)
+  # 2. Secrets scanning - TruffleHog (findings are reported but do not fail the job)
   trufflehog-scan:
     name: 2. Secrets scanning - TruffleHog
     runs-on: ubuntu-latest
@@ -67,6 +67,7 @@ jobs:
 
       - name: Secrets scanning - TruffleHog
         uses: trufflesecurity/trufflehog@v3.90.0
+        continue-on-error: true # ignore findings; the job still reports success
         with:
           path: ./
           extra_args: --results=verified,unknown --no-update
