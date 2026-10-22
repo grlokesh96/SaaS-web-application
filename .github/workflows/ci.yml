@@ -129,7 +129,7 @@ jobs:
 
       - name: Lint Dockerfile - Hadolint
         id: hadolint-scan
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: Dockerfile
           format: sarif
