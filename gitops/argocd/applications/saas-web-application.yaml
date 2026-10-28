@@ -24,7 +24,7 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
-  revisionHistoryLimit: 6
+  revisionHistoryLimit: 10
   info:
     - name: Pipeline
       value: https://github.com/lokeshzenbook-coder/SaaS-web-application/actions
