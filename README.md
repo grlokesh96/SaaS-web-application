@@ -15,6 +15,7 @@ Built with **Node.js + Express + SQLite** (`node:sqlite`, no native modules). Th
 - **Rate limiting** — global limiter on auth endpoints + per-user limiter on the product API
 - **Security** — security headers, input validation, no plaintext passwords, JWT secrets from env
 - **Dashboard** — usage stats, API key, plan switching, and a live API playground
+- **Dark/light theme** — a toggle in the header (and dashboard sidebar) that persists your choice across pages and reloads
 - **Tests** — end-to-end API suite using Node's built-in test runner (17 tests)
 - **CI/CD** — end-to-end DevSecOps pipeline: secrets/SCA/SAST scanning, lint, tests, coverage, container scanning, SBOM, and Docker Hub publishing (see below)
 

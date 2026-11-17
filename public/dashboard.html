@@ -5,11 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dashboard — Acme SaaS</title>
     <link rel="stylesheet" href="/css/style.css" />
+    <script src="/js/theme.js"></script>
   </head>
   <body>
     <div class="dashboard">
       <aside class="sidebar">
         <a class="brand" href="/">Acme<span>SaaS</span></a>
+        <button
+          class="theme-toggle sidebar-theme-toggle"
+          type="button"
+          data-theme-toggle
+          aria-label="Switch to light theme"
+        >
+          <span class="icon-sun" aria-hidden="true">☀️</span>
+          <span class="icon-moon" aria-hidden="true">🌙</span>
+        </button>
         <p class="muted" style="margin-top: 8px">Menu</p>
         <a class="active" href="#overview">Overview</a>
         <a href="#api">API Key</a>

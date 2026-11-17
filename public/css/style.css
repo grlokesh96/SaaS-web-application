@@ -1,4 +1,6 @@
-:root {
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #0b1120;
   --bg-soft: #111a33;
   --card: #131c36;
@@ -8,10 +10,29 @@
   --primary: #6366f1;
   --primary-2: #8b5cf6;
   --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.1);
   --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.1);
   --warn: #fbbf24;
   --radius: 12px;
   --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f8fc;
+  --bg-soft: #eef1f8;
+  --card: #ffffff;
+  --border: #d9dfeb;
+  --text: #101828;
+  --muted: #5b6478;
+  --primary: #4f46e5;
+  --primary-2: #7c3aed;
+  --success: #047857;
+  --success-soft: rgba(4, 120, 87, 0.08);
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.08);
+  --warn: #b45309;
 }
 
 * {
@@ -106,6 +127,45 @@ a:hover {
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.theme-toggle:hover {
+  background: var(--bg-soft);
+  border-color: var(--primary);
+}
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Each icon is shown only for the theme it switches *to*. */
+.theme-toggle .icon-sun,
+.theme-toggle .icon-moon {
+  display: none;
+}
+:root[data-theme="dark"] .theme-toggle .icon-sun {
+  display: inline;
+}
+:root[data-theme="light"] .theme-toggle .icon-moon {
+  display: inline;
 }
 
 .hero {
@@ -231,7 +291,7 @@ select:focus {
 }
 
 .error {
-  background: rgba(248, 113, 113, 0.1);
+  background: var(--danger-soft);
   border: 1px solid var(--danger);
   color: var(--danger);
   padding: 10px 12px;
@@ -241,7 +301,7 @@ select:focus {
   display: none;
 }
 .success {
-  background: rgba(52, 211, 153, 0.1);
+  background: var(--success-soft);
   border: 1px solid var(--success);
   color: var(--success);
   padding: 10px 12px;
@@ -280,6 +340,10 @@ select:focus {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin: 12px 0 4px;
+}
+.sidebar-theme-toggle {
+  align-self: flex-start;
+  margin-top: 16px;
 }
 
 .panel {
