@@ -8,11 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Initial open-source release preparation
 
 ## [1.0.0] - 2025-01-15
 
 ### Added
+
 - Full-stack SaaS starter with authentication
 - Plan-based subscriptions (Free / Pro / Enterprise)
 - Usage quotas and rate limiting
@@ -26,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - End-to-end API test suite (17 tests)
 
 ### Security
+
 - bcrypt password hashing
 - JWT with httpOnly cookies
 - Input validation and security headers
