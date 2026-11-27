@@ -15,3 +15,6 @@ DEPLOYMENT.md
 
 # Terraform (HCL, not a Prettier-supported language)
 terraform/
+
+# Code of Conduct - excluded per Prettier configuration policy
+CODE_OF_CONDUCT.md
