@@ -1,3 +1,4 @@
+
 # Contributor Covenant Code of Conduct
 
 ## Our Pledge
@@ -16,19 +17,19 @@ diverse, inclusive, and healthy community.
 
 Examples of behavior that contributes to a positive environment include:
 
-* Demonstrating empathy and kindness toward other people
-* Being respectful of differing opinions, viewpoints, and experiences
-* Giving and gracefully accepting constructive feedback
-* Accepting responsibility and apologizing to those affected by our mistakes
-* Focusing on what is best not just for us as individuals, but for the overall community
+- Demonstrating empathy and kindness toward other people
+- Being respectful of differing opinions, viewpoints, and experiences
+- Giving and gracefully accepting constructive feedback
+- Accepting responsibility and apologizing to those affected by our mistakes
+- Focusing on what is best not just for us as individuals, but for the overall community
 
 Examples of unacceptable behavior include:
 
-* The use of sexualized language or imagery, and sexual attention or advances of any kind
-* Trolling, insulting or derogatory comments, and personal or political attacks
-* Public or private harassment
-* Publishing others' private information without explicit permission
-* Other conduct which could reasonably be considered inappropriate in a professional setting
+- The use of sexualized language or imagery, and sexual attention or advances of any kind
+- Trolling, insulting or derogatory comments, and personal or political attacks
+- Public or private harassment
+- Publishing others' private information without explicit permission
+- Other conduct that could reasonably be considered inappropriate in a professional setting
 
 ## Enforcement Responsibilities
 
@@ -37,48 +38,60 @@ acceptable behavior and will take appropriate and fair corrective action in
 response to any behavior that they deem inappropriate, threatening, offensive,
 or harmful.
 
+Community leaders have the right and responsibility to remove, edit, or reject
+comments, commits, code, issues, pull requests, and other contributions that
+violate this Code of Conduct.
+
 ## Scope
 
-This Code of Conduct applies within all community spaces, and also applies when
-an individual is officially representing the community in public spaces.
+This Code of Conduct applies within all community spaces and when an individual
+is officially representing the community in public spaces.
 
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement at
-security@yourdomain.com. All complaints will be reviewed and investigated
-promptly and fairly.
+<security@yourdomain.com>.
+
+All complaints will be reviewed and investigated promptly and fairly.
+
+Community leaders are obligated to respect the privacy and security of the
+reporter of any incident.
 
 ## Enforcement Guidelines
 
 Community leaders will follow these Community Impact Guidelines in determining
-the consequences for any action they deem in violation of this Code of Conduct:
+the consequences for any action they deem to be in violation of this Code of
+Conduct.
 
 ### 1. Correction
 
-**Community Impact**: Use of inappropriate language or other behavior deemed
+**Community Impact:** Use of inappropriate language or other behavior deemed
 unprofessional.
 
-**Consequence**: A private, written warning from community leaders.
+**Consequence:** A private, written warning from community leaders explaining
+the violation and why the behavior was inappropriate.
 
 ### 2. Warning
 
-**Community Impact**: A violation through a single incident or series of actions.
+**Community Impact:** A violation through a single incident or series of actions.
 
-**Consequence**: A warning with consequences for continued behavior.
+**Consequence:** A warning with consequences for continued inappropriate
+behavior.
 
 ### 3. Temporary Ban
 
-**Community Impact**: A serious violation of community standards.
+**Community Impact:** A serious violation of community standards.
 
-**Consequence**: A temporary ban from any sort of interaction.
+**Consequence:** A temporary ban from community interactions for a specified
+period.
 
 ### 4. Permanent Ban
 
-**Community Impact**: Demonstrating a pattern of violation of community
+**Community Impact:** Demonstrating a pattern of violations of community
 standards.
 
-**Consequence**: A permanent ban from any sort of public interaction within the community.
+**Consequence:** A permanent ban from public interactions within the community.
 
 ## Attribution
 
